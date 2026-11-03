@@ -30,7 +30,12 @@ def ask(q):
 
 rows, ok = [], 0
 for q in questions:
-    res = ask(q["q"])
+    try:
+        res = ask(q["q"])
+    except Exception as e:
+        print(f"⚠️  שגיאת רשת בשאלה «{q['q']}»: {e}")
+        print("   וודא ש-npm run dev רץ ואז הרץ שוב את eval.py")
+        break
     got = "answer" if res["found"] else "refuse"
     good = got == q["expect"]
     ok += good
@@ -39,10 +44,17 @@ for q in questions:
     print(("✅" if good else "❌"), q["q"], f"(ציפינו: {q['expect']}, קיבלנו: {got}, ציון {res['score']:.2f})")
     time.sleep(1.5)
 
-print(f"\nדיוק כולל: {ok}/{len(questions)} = {ok / len(questions):.0%}")
-inventions = [r for r in rows if r["expect"] == "refuse" and r["got"] == "answer"]
-print(f"המצאות (ענה במקום לסרב): {len(inventions)}")
-print("שאלות שנכשלו בודקים ידנית מול האתר, ומכווננים MIN_SIMILARITY או את ההנחיה.")
+total = len(rows)
+if total:
+    print(f"\nדיוק כולל: {ok}/{total} = {ok / total:.0%}")
+    inventions = [r for r in rows if r["expect"] == "refuse" and r["got"] == "answer"]
+    print(f"המצאות (ענה במקום לסרב): {len(inventions)}")
+    if total < len(questions):
+        print(f"⚠️  הריצה עצרה אחרי {total}/{len(questions)} שאלות (ראה שגיאה למעלה)")
+    print("שאלות שנכשלו בודקים ידנית מול האתר, ומכווננים MIN_SIMILARITY או את ההנחיה.")
 
-with open("eval_results.json", "w", encoding="utf-8") as f:
-    json.dump(rows, f, ensure_ascii=False, indent=2)
+    with open("eval_results.json", "w", encoding="utf-8") as f:
+        json.dump(rows, f, ensure_ascii=False, indent=2)
+    print("תוצאות נשמרו ל-eval_results.json")
+else:
+    print("לא הושלמה אף שאלה — בדוק שה-server רץ.")
