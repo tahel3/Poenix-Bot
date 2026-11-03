@@ -1,0 +1,8 @@
+*.env
+/ingest/data/
+__pycache__/
+*.pyc
+.venv/
+eval_results.json
+node_modules/
+.next/
