@@ -5,7 +5,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const CHAT_MODEL = process.env.CHAT_MODEL || "gemini-3.8-flash";
+const CHAT_MODEL = process.env.CHAT_MODEL || "gemini-2.0-flash";
 const EMBED_MODEL = process.env.EMBED_MODEL || "gemini-embedding-001";
 const DIMS = 768;
 const TOP_K = 5;
@@ -34,16 +34,29 @@ function ai() {
   return _ai;
 }
 
-async function withRetry<T>(fn: () => Promise<T>, tries = 6): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
+  let rateRetries = 0;
+  const MAX_RATE_RETRIES = 3; // נסה עד 3 פעמים על 429 לפני כניעה
   for (let i = 0; ; i++) {
     try {
       return await fn();
     } catch (e: unknown) {
       const status = (e as { status?: number })?.status;
-      // אל תנסה שוב אם חרגת מהמכסה (429) — אין טעם לחכות
-      if (status === 429) throw e;
+      if (status === 429) {
+        // 429 יכול להיות מגבלה לדקה (RPM) — נסה שוב עם המתנה
+        if (rateRetries < MAX_RATE_RETRIES) {
+          rateRetries++;
+          // המתנה קבועה של 15 שניות בין ניסיונות על rate limit
+          const wait = 15_000 * rateRetries + Math.random() * 2000;
+          console.warn(`[rag] 429 rate limit — retry ${rateRetries}/${MAX_RATE_RETRIES} in ${Math.round(wait / 1000)}s`);
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        // הגענו למגבלה יומית — זרוק
+        throw e;
+      }
       if (i === tries - 1) throw e;
-      // השהיה אקספוננציאלית עם jitter: עד ~90 שניות בניסיון האחרון
+      // השהיה אקספוננציאלית עם jitter לשגיאות אחרות
       const jitter = Math.random() * 1000;
       await new Promise((r) => setTimeout(r, 2 ** i * 1500 + jitter));
     }

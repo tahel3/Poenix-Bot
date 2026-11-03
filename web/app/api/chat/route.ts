@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { answer, NOT_FOUND } from "@/lib/rag";
 
-export const maxDuration = 30;
+export const maxDuration = 90;
 
 export async function POST(req: NextRequest) {
   try {
