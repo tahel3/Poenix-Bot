@@ -63,10 +63,23 @@ export default function Home() {
   }
 
   return (
+    <div className="page">
     <div className="wrap">
-      <h1>פניקס בוט</h1>
-      <div className="sub">בוט שאפשר להאמין לו.</div>
-  <div className="sub">יש לכם שאלה על האתר שלנו? אדע לענות לכם תשובות אמינות, כולל מקור!</div>
+      <div className="header">
+        <div className="logo">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M12 2c1.2 2.2 3 3.6 3 6.2 0 1.7-1.3 3-3 3s-3-1.3-3-3c0 0-2 2.3-2 5.3C7 16.9 9.2 19 12 19s5-2.1 5-5.5c0-4.5-3-7-5-11.5z"
+              fill="white"
+            />
+          </svg>
+        </div>
+        <div className="header-text">
+          <h1>הפניקס · העוזר הדיגיטלי</h1>
+          <div className="tagline">בוט שאפשר להאמין לו</div>
+        </div>
+      </div>
+      <div className="sub">יש לכם שאלה על האתר שלנו? אדע לענות לכם תשובות אמינות, כולל מקור!</div>
 
       {messages.length === 0 && (
         <div className="examples">
@@ -124,7 +137,15 @@ export default function Home() {
             )}
           </div>
         ))}
-        {loading && <div className="msg bot">מחפש באתר...</div>}
+        {loading && (
+          <div className="msg bot">
+            <span className="typing">
+              <span />
+              <span />
+              <span />
+            </span>
+          </div>
+        )}
         <div ref={endRef} />
       </div>
 
@@ -135,10 +156,13 @@ export default function Home() {
         }}
       >
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="שאלי אותי משהו על הפניקס..." maxLength={500} />
-        <button className="send" disabled={loading || !input.trim()}>
-          שלח
+        <button className="send" disabled={loading || !input.trim()} aria-label="שלח">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M20 12H5M12 5L5 12L12 19" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
       </form>
+    </div>
     </div>
   );
 }
