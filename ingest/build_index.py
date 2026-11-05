@@ -1,13 +1,15 @@
 """שלב 2: חיתוך העמודים לקטעים, הטמעה (embeddings) ושמירה במסד הוקטורי ב-Supabase.
 
 הרצה (מתוך תיקיית ingest):  python build_index.py
-קורא את data/pages.json, מוחק את הקטעים הישנים בטבלה chunks ומעלה את החדשים.
+קורא את data/pages.json ואת data/doc_pages.json (אם קיים), מוחק את הקטעים הישנים בטבלה chunks ומעלה את החדשים.
+אם הריצה נקטעה: python build_index.py --resume
 (קודם מריצים פעם אחת את supabase/setup.sql ב-Supabase.)
 
 מודל ה-embedding: gemini-embedding-001 — זהה למה שמשמש ב-web/lib/rag.ts לחיפוש.
 """
 import os
 import re
+import sys
 import json
 import math
 import time
@@ -87,16 +89,23 @@ def embed(texts):
 if __name__ == "__main__":
     with open(os.path.join("data", "pages.json"), encoding="utf-8") as f:
         pages = json.load(f)
+    # מסמכים מ-crawl_docs.py, אם הורץ
+    docs_path = os.path.join("data", "doc_pages.json")
+    if os.path.exists(docs_path):
+        with open(docs_path, encoding="utf-8") as f:
+            pages += json.load(f)
     chunks = make_chunks(pages)
     print(f"{len(pages)} עמודים -> {len(chunks)} קטעים")
 
-    # בדיקה כמה כבר הועלו — אם יקרוס נמשיך מאיפה שעצרנו
-    existing = db.table("chunks").select("id", count="exact").execute()
-    start_from = existing.count or 0
-    if start_from > 0:
+    # --resume ממשיך ריצה שנקטעה, על אותו pages.json בלבד.
+    # בלי הדגל הטבלה נמחקת: קטעים ישנים לא נשארים לצד החדשים.
+    if "--resume" in sys.argv:
+        existing = db.table("chunks").select("id", count="exact").limit(1).execute()
+        start_from = existing.count or 0
         print(f"  ממשיכה מקטע {start_from} (כבר הועלו)")
     else:
         db.table("chunks").delete().neq("id", 0).execute()
+        start_from = 0
         print("  הטבלה נוקתה, מתחילה מהתחלה")
 
     for i in range(start_from, len(chunks), BATCH):

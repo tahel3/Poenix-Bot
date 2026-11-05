@@ -18,10 +18,12 @@ const EXAMPLES = [
   "מה מזג האוויר מחר?",
 ];
 
-function matchLabel(score: number) {
-  if (score >= 0.72) return { cls: "high", text: "🟢 התאמה לאתר: גבוהה" };
-  if (score >= 0.55) return { cls: "mid", text: "🟡 התאמה לאתר: בינונית" };
-  return { cls: "low", text: "🔴 התאמה לאתר: נמוכה" };
+// הציון מודד קרבה בנושא בין השאלה לקטע, לא אם התשובה נמצאת בו. לכן בסירוב אין תג ירוק.
+function matchLabel(score: number, found?: boolean) {
+  if (!found) return { cls: "low", text: "🔴 לא נמצאה תשובה בקטעים מהאתר" };
+  if (score >= 0.72) return { cls: "high", text: "🟢 נמצאו קטעים קרובים מאוד לשאלה" };
+  if (score >= 0.55) return { cls: "mid", text: "🟡 נמצאו קטעים קרובים לשאלה" };
+  return { cls: "low", text: "🔴 נמצאו קטעים רחוקים מהשאלה" };
 }
 
 export default function Home() {
@@ -93,7 +95,7 @@ export default function Home() {
             {m.content}
             {m.role === "assistant" && m.score !== undefined && (
               <div className="meta">
-                <span className={`badge ${matchLabel(m.score).cls}`}>{matchLabel(m.score).text}</span>
+                <span className={`badge ${matchLabel(m.score, m.found).cls}`}>{matchLabel(m.score, m.found).text}</span>
                 {m.found && m.sources && m.sources.length > 0 && (
                   <div>
                     <b>המקור:</b>

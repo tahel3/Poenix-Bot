@@ -21,6 +21,7 @@ cd ingest
 pip install -r requirements.txt
 cp .env.example .env              # ממלאים מפתחות
 python crawl.py                   # סריקה
+python crawl_docs.py              # מסמכי PDF מהרשימה documents.json (לא חובה)
 python build_index.py             # העלאה ל-Supabase
 
 cd ../web
@@ -43,4 +44,4 @@ npm run dev                       # http://localhost:3000
 - הבוט לא נותן ייעוץ אישי ולא ניגש למידע לקוח.
 
 ## רענון
-להריץ שוב `crawl.py` ו-`build_index.py` (מוחק ומעלה מחדש את הטבלה). אין צורך בפריסה מחדש.
+להריץ שוב `crawl.py`, `crawl_docs.py` ו-`build_index.py` (מוחק ומעלה מחדש את הטבלה). אין צורך בפריסה מחדש.
