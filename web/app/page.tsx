@@ -62,8 +62,9 @@ export default function Home() {
 
   return (
     <div className="wrap">
-      <h1>🔥 הבוט שיודע את האתר של הפניקס</h1>
-      <div className="sub">עונה אך ורק מתוך המידע שבאתר, עם מקור לכל תשובה. אם זה לא כתוב באתר - הוא יגיד.</div>
+      <h1>פניקס בוט</h1>
+      <div className="sub">בוט שאפשר להאמין לו.</div>
+  <div className="sub">יש לכם שאלה על האתר שלנו? אדע לענות לכם תשובות אמינות, כולל מקור!</div>
 
       {messages.length === 0 && (
         <div className="examples">
