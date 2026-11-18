@@ -327,3 +327,25 @@ button.send:disabled { opacity: 0.4; cursor: default; transform: none; }
   .wrap { box-shadow: none; }
   .header, .sub, .examples, .tools, .chat, form { padding-left: 14px; padding-right: 14px; }
 }
+
+/* ---------- Language toggle + LTR (English) ---------- */
+.lang-toggle {
+  margin-inline-start: auto;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-900);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.lang-toggle:hover { border-color: var(--brand-500); }
+
+/* bubble tails already sit on the outer corner; only the sides swap */
+[dir="ltr"] .user { align-self: flex-end; }
+[dir="ltr"] .bot { align-self: flex-start; }
+[dir="ltr"] button.send svg { transform: scaleX(-1); }
