@@ -1,11 +1,15 @@
 // שכבת התשובה: אחזור היברידי מ-Supabase -> סף התאמה -> מודל שפה -> תשובה + מקורות.
 //
 // Embedding: gemini-embedding-001 (שאלה בודדת בכל פעם, אין בעיית rate limit).
-// Chat:      Gemini 3.8 Flash.
+// Chat:      Gemini 3.8 Flash, with automatic fallback to other Flash models if a model is unavailable.
 import { GoogleGenAI } from "@google/genai";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-const CHAT_MODEL = process.env.CHAT_MODEL || "gemini-2.0-flash";
+// The first model is CHAT_MODEL (set in Vercel), then fallbacks. If Google retires a model,
+// the bot moves on to the next one instead of failing.
+const CHAT_MODELS = [
+  ...new Set([process.env.CHAT_MODEL, "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"].filter(Boolean) as string[]),
+];
 const EMBED_MODEL = process.env.EMBED_MODEL || "gemini-embedding-001";
 const DIMS = 768;
 const TOP_K = 5;
@@ -74,6 +78,27 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
   }
 }
 
+function isModelUnavailable(e: unknown) {
+  const status = (e as { status?: number })?.status;
+  const msg = String((e as { message?: string })?.message ?? e).toLowerCase();
+  return status === 404 || msg.includes("not found") || msg.includes("is not supported") || msg.includes("deprecated");
+}
+
+// Calls the chat model, falling back to the next model in CHAT_MODELS when one is unavailable.
+async function generate(contents: string, config: { systemInstruction: string; temperature: number }) {
+  let lastError: unknown;
+  for (const model of CHAT_MODELS) {
+    try {
+      return await withRetry(() => ai().models.generateContent({ model, contents, config }));
+    } catch (e) {
+      if (!isModelUnavailable(e)) throw e;
+      console.warn(`[rag] model ${model} unavailable, trying next`);
+      lastError = e;
+    }
+  }
+  throw lastError;
+}
+
 let _db: SupabaseClient | null = null;
 function db() {
   if (!_db) _db = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_SERVICE_KEY!);
@@ -126,17 +151,11 @@ export type Msg = { role: "user" | "assistant"; content: string };
 // This keeps vector and keyword search as accurate as for a Hebrew question.
 async function toHebrewQuery(question: string): Promise<string> {
   try {
-    const resp = await withRetry(() =>
-      ai().models.generateContent({
-        model: CHAT_MODEL,
-        contents: question,
-        config: {
-          systemInstruction:
-            "Translate the user's question into natural Hebrew as an Israeli insurance customer would phrase it. Output only the Hebrew question, nothing else.",
-          temperature: 0,
-        },
-      })
-    );
+    const resp = await generate(question, {
+      systemInstruction:
+        "Translate the user's question into natural Hebrew as an Israeli insurance customer would phrase it. Output only the Hebrew question, nothing else.",
+      temperature: 0,
+    });
     return (resp.text || "").trim() || question;
   } catch {
     return question; // fall back to cross-lingual embedding
@@ -166,13 +185,10 @@ export async function answer(question: string, history: Msg[] = [], lang: Lang =
         .join("\n")
     : "";
 
-  const resp = await withRetry(() =>
-    ai().models.generateContent({
-      model: CHAT_MODEL,
-      contents: `קטעים מאתר הפניקס:\n${context}${historyBlock}\n\nשאלת הלקוח: ${question}`,
-      config: { systemInstruction: systemPrompt(lang), temperature: 0.1 },
-    })
-  );
+  const resp = await generate(`קטעים מאתר הפניקס:\n${context}${historyBlock}\n\nשאלת הלקוח: ${question}`, {
+    systemInstruction: systemPrompt(lang),
+    temperature: 0.1,
+  });
   const text = (resp.text || "").trim() || notFound(lang);
   if (text.startsWith("מצטער, המידע אינו מופיע") || text.startsWith("Sorry, this information does not appear")) {
     return { answer: notFound(lang), sources: [] as string[], score: best, found: false, chunks: preview };
