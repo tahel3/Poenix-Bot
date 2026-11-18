@@ -1,15 +1,24 @@
 // שכבת התשובה: אחזור היברידי מ-Supabase -> סף התאמה -> מודל שפה -> תשובה + מקורות.
 //
 // Embedding: gemini-embedding-001 (שאלה בודדת בכל פעם, אין בעיית rate limit).
-// Chat:      Gemini 3.8 Flash, with automatic fallback to other Flash models if a model is unavailable.
+// Chat:      Gemini 3.8 Flash first, then flash-lite models when it is overloaded or slow.
 import { GoogleGenAI } from "@google/genai";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // The first model is CHAT_MODEL (set in Vercel), then fallbacks. If Google retires a model,
 // the bot moves on to the next one instead of failing.
-const CHAT_MODELS = [
-  ...new Set([process.env.CHAT_MODEL, "gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"].filter(Boolean) as string[]),
+// Model chain: the strongest model first with a short timeout (it is often overloaded with 503),
+// then fast lite models. The next model is tried on 404/408/429/500/503.
+type ModelTry = { model: string; timeoutMs: number; config?: Record<string, unknown> };
+const NO_THINKING = { thinkingConfig: { thinkingBudget: 0 } };
+const CHAT_MODELS: ModelTry[] = [
+  ...(process.env.CHAT_MODEL ? [{ model: process.env.CHAT_MODEL, timeoutMs: 10_000 }] : []),
+  { model: "gemini-3.8-flash", timeoutMs: 6_000, config: NO_THINKING },
+  { model: "gemini-3.5-flash-lite", timeoutMs: 10_000 },
+  { model: "gemini-3.1-flash-lite", timeoutMs: 10_000 },
+  { model: "gemini-3.6-flash", timeoutMs: 8_000, config: NO_THINKING },
 ];
+const TOTAL_BUDGET_MS = 40_000;
 const EMBED_MODEL = process.env.EMBED_MODEL || "gemini-embedding-001";
 const DIMS = 768;
 const TOP_K = 5;
@@ -78,25 +87,39 @@ async function withRetry<T>(fn: () => Promise<T>, tries = 4): Promise<T> {
   }
 }
 
-function isModelUnavailable(e: unknown) {
-  const status = (e as { status?: number })?.status;
-  const msg = String((e as { message?: string })?.message ?? e).toLowerCase();
-  return status === 404 || msg.includes("not found") || msg.includes("is not supported") || msg.includes("deprecated");
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, rej) => setTimeout(() => rej(Object.assign(new Error("timeout"), { status: 408 })), ms)),
+  ]);
 }
 
-// Calls the chat model, falling back to the next model in CHAT_MODELS when one is unavailable.
+function shouldTryNext(e: unknown) {
+  const status = (e as { status?: number })?.status;
+  const msg = String((e as { message?: string })?.message ?? e).toLowerCase();
+  return (
+    status === 404 || status === 408 || status === 429 || status === 500 || status === 503 ||
+    msg.includes("not found") || msg.includes("is not supported") || msg.includes("deprecated") ||
+    msg.includes("unavailable") || msg.includes("overloaded") || msg.includes("high demand")
+  );
+}
+
+// Calls the chat model chain: each model gets a timeout, and on overload/limits the next one is tried.
 async function generate(contents: string, config: { systemInstruction: string; temperature: number }) {
+  const start = Date.now();
   let lastError: unknown;
-  for (const model of CHAT_MODELS) {
+  for (const { model, timeoutMs, config: extra } of CHAT_MODELS) {
+    const left = TOTAL_BUDGET_MS - (Date.now() - start);
+    if (left < 2_000) break;
     try {
-      return await withRetry(() => ai().models.generateContent({ model, contents, config }));
+      return await withTimeout(ai().models.generateContent({ model, contents, config: { ...config, ...extra } }), Math.min(timeoutMs, left));
     } catch (e) {
-      if (!isModelUnavailable(e)) throw e;
-      console.warn(`[rag] model ${model} unavailable, trying next`);
+      if (!shouldTryNext(e)) throw e;
+      console.warn(`[rag] ${model} failed (${(e as { status?: number })?.status ?? "?"}), trying next`);
       lastError = e;
     }
   }
-  throw lastError;
+  throw lastError ?? new Error("no model available");
 }
 
 let _db: SupabaseClient | null = null;
